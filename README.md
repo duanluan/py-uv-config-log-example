@@ -20,3 +20,8 @@ pyinstaller -D src/main/setup.py -n main --add-data "res;res"
 ```bash
 pyinstaller main.spec
 ```
+# 启动命令 Start Command
+
+```shell
+uv run -m src.main.setup
+```
