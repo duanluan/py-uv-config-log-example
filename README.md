@@ -24,8 +24,17 @@ pyinstaller -D src/main/setup.py -n main --add-data "res;res"
 pyinstaller main.spec --noconfirm
 ```
 
-# 启动命令 Start Command
+# 命令 Start Command
 
 ```shell
+# 当前目录创建虚拟环境 Create a virtual environment in the current directory
+uv venv
+# 激活虚拟环境 Activate the virtual environment
+.\.venv\Scripts\activate
+
+# 安装依赖 Install dependencies
+uv pip install -e .
+
+# 启动 Start the application
 uv run -m src.main.setup
 ```
