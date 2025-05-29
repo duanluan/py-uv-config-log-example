@@ -24,7 +24,7 @@ pyinstaller -D src/main/setup.py -n main --add-data "res;res"
 pyinstaller main.spec --noconfirm
 ```
 
-# 命令 Start Command
+# 命令 Command
 
 ```shell
 # 当前目录创建虚拟环境 Create a virtual environment in the current directory
