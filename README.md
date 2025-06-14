@@ -1,8 +1,9 @@
 # py-uv-config-log-example
 
-uv 管理依赖，从 yml 读取配置，自定义 logging 生成日志，定时任务压缩归档日志。
+[uv](https://docs.astral.sh/uv/) 管理依赖，使用 [PyYAML](https://pyyaml.org/) 从 yml 读取配置，自定义 [logging](https://docs.python.org/3/library/logging.html) 生成日志，使用 [APScheduler](https://apscheduler.readthedocs.io/) 和 [py7zr](https://py7zr.readthedocs.io/) 定时压缩归档日志。
 
-Using uv to manage dependencies, loading configurations from a YAML file, customizing logging for generating logs, and using scheduled tasks to compress and archive logs.
+Use [uv](https://docs.astral.sh/uv/) to manage dependencies, read configuration from a YAML file using [PyYAML](https://pyyaml.org/), customize [logging](https://docs.python.org/3/library/logging.html) to generate logs, and use [APScheduler](https://apscheduler.readthedocs.io/) and [py7zr](https://py7zr.readthedocs.io/) to periodically compress and archive logs.
+
 
 # 打包 Packaging EXE
 
