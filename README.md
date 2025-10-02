@@ -1,41 +1,46 @@
 # py-uv-config-log-example
 
-[uv](https://docs.astral.sh/uv/) 管理依赖，使用 [PyYAML](https://pyyaml.org/) 从 yml 读取配置，自定义 [logging](https://docs.python.org/3/library/logging.html) 生成日志，使用 [APScheduler](https://apscheduler.readthedocs.io/) 和 [py7zr](https://py7zr.readthedocs.io/) 定时压缩归档日志。
+[English](./README.md) | [简体中文](./README_CN.md)
 
-Use [uv](https://docs.astral.sh/uv/) to manage dependencies, read configuration from a YAML file using [PyYAML](https://pyyaml.org/), customize [logging](https://docs.python.org/3/library/logging.html) to generate logs, and use [APScheduler](https://apscheduler.readthedocs.io/) and [py7zr](https://py7zr.readthedocs.io/) to periodically compress and archive logs.
+Use [uv](https://www.google.com/search?q=https.docs.astral.sh/uv/) to manage dependencies, read configuration from a YAML file using [PyYAML](https://pyyaml.org/), customize [logging](https://docs.python.org/3/library/logging.html) to generate logs, and use [APScheduler](https://apscheduler.readthedocs.io/) and [py7zr](https://py7zr.readthedocs.io/) to periodically compress and archive logs.
 
+# Command
 
-# 打包 Packaging EXE
+```shell
+# Create a virtual environment in the current directory
+uv venv
+# Activate the virtual environment (Windows)
+.venv\Scripts\activate.bat
+# Deactivate the virtual environment (Windows)
+.venv\Scripts\deactivate.bat
 
-## 首次构建 Initial Build
+# Install dependencies
+uv pip install -e .
 
-* `-F`单文件 Single-file executable，`-D`单目录 Single-directory executable
-* `-n`exe 文件名 Specifies the name of the exe file
-* `--add-data`添加资源文件 Adds resource files
+# Start the application
+uv run -m src.main.setup
+```
+
+# Packaging EXE
+
+**Initial Build**:
+
+  * `-F` Single-file executable, `-D` Single-directory executable
+  * `-n` Specifies the name of the exe file
+  * `--add-data` Adds resource files
+
+<!-- end list -->
 
 ```bash
 pyinstaller -D src/main/setup.py -n main --add-data "res;res"
 ```
 
-## 通过 .spec 文件构建 Build Using a .spec File
+**Build Using a .spec File**:
 
-* `--noconfirm`无需确认是否覆盖上次构建的文件 No need to confirm whether to overwrite the last built file
+  * `--noconfirm` No need to confirm whether to overwrite the last built file
+
+<!-- end list -->
 
 ```bash
 pyinstaller main.spec --noconfirm
-```
-
-# 命令 Command
-
-```shell
-# 当前目录创建虚拟环境 Create a virtual environment in the current directory
-uv venv
-# 激活虚拟环境 Activate the virtual environment
-.\.venv\Scripts\activate
-
-# 安装依赖 Install dependencies
-uv pip install -e .
-
-# 启动 Start the application
-uv run -m src.main.setup
 ```
