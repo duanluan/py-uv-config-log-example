@@ -14,10 +14,18 @@
 ```shell
 # 当前目录创建虚拟环境
 uv venv
-# 激活虚拟环境（Windows）
+
+# --- 激活虚拟环境 ---
+# Windows
 .venv\Scripts\activate.bat
-# 退出虚拟环境（Windows）
+# Linux / MacOS
+source .venv/bin/activate
+
+# --- 退出虚拟环境 ---
+# Windows
 .venv\Scripts\deactivate.bat
+# Linux / MacOS
+deactivate
 
 # 以可编辑模式安装当前目录下的项目
 uv pip install -e .
