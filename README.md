@@ -14,10 +14,18 @@ Use [uv](https://www.google.com/search?q=https.docs.astral.sh/uv/) to manage dep
 ```shell
 # Create a virtual environment in the current directory
 uv venv
-# Activate the virtual environment (Windows)
+
+# --- Activate the virtual environment ---
+# Windows
 .venv\Scripts\activate.bat
-# Deactivate the virtual environment (Windows)
+# Linux / MacOS
+source .venv/bin/activate
+
+# --- Deactivate the virtual environment ---
+# Windows
 .venv\Scripts\deactivate.bat
+# Linux / MacOS
+deactivate
 
 # Install the project in the current directory in editable mode
 uv pip install -e .
