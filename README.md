@@ -2,18 +2,23 @@
 
 [English](./README.md) | [简体中文](./README_CN.md)
 
-Use [uv](https://www.google.com/search?q=https.docs.astral.sh/uv/) to manage dependencies, read configuration from a YAML file using [PyYAML](https://pyyaml.org/), customize [logging](https://docs.python.org/3/library/logging.html) to generate logs, and use [APScheduler](https://apscheduler.readthedocs.io/) and [py7zr](https://py7zr.readthedocs.io/) to periodically compress and archive logs.
+Use [uv](https://docs.astral.sh/uv/) to manage dependencies, load YAML configuration via [PyYAML](https://pyyaml.org/), generate rotating logs with [logging](https://docs.python.org/3/library/logging.html), and compress archived logs using [APScheduler](https://apscheduler.readthedocs.io/) and [py7zr](https://py7zr.readthedocs.io/).
 
-# Usage in PyCharm
-
-- In the Project view, right-click the `src` directory and select `Mark Directory as` -> `Sources Root`. This allows for direct imports of modules located under `src`.
-- If running as a module, set the 'Module name' to `app1.app1` and the 'Working directory' to the project's root directory.
-
-# Command
+## Quick Start (First Run)
 
 ```shell
-# Create a virtual environment in the current directory
+# Create project virtual environment
 uv venv
+
+# Sync locked dependencies
+uv sync
+
+# Install current project in editable mode (provides app1/common imports)
+uv pip install -e .
+
+# Run app module
+uv run python -m app1.app1
+
 
 # --- Activate the virtual environment ---
 # Windows
@@ -26,27 +31,58 @@ source .venv/bin/activate
 .venv\Scripts\deactivate.bat
 # Linux / MacOS
 deactivate
+```
 
-# Install the project in the current directory in editable mode
-uv pip install -e .
-# Execute the 'app1.app1' module as a script within the uv-managed environment
+Notes:
+
+- `uv run` does not require manually activating `.venv`.
+- If you run `uv sync` again later, run `uv pip install -e .` again.
+
+## Daily Run
+
+```shell
 uv run python -m app1.app1
 ```
 
-# Packaging EXE
+Optional one-off command (without persisting editable install):
 
-**Initial Build**:
+```shell
+uv run --with-editable . python -m app1.app1
+```
 
-- `-F` Single-file executable, `-D` Single-directory executable
-- `-n` Specifies the name of the exe file
-- `--add-data` Adds resource files
-- `-p` Add the specified path to the module search path (sys.path)
+## Usage in PyCharm
+
+Set once, then reuse:
+
+1. Interpreter: select project `.venv` (uv-created environment).
+2. Mark `src` as `Sources Root` in Project view.
+3. Run Configuration:
+   - Type: Python
+   - Run: `Module name`
+   - Module name: `app1.app1`
+   - Working directory: project root
+4. Save the run configuration (optionally as shared).
+
+If you see `ModuleNotFoundError: No module named 'app1'` or `'common'`:
+
+```shell
+uv pip install -e .
+```
+
+## Packaging EXE
+
+Initial build:
+
+- `-F` single-file executable, `-D` single-directory executable
+- `-n` executable name
+- `--add-data` include resource files
+- `-p` append search path to `sys.path`
 
 ```shell
 pyinstaller -n app1 -D --add-data "src/app1/res;res" -p src src/app1/app1.py
 ```
 
-**Build Using a .spec File**:
+Build with `.spec`:
 
 - `--noconfirm` No need to confirm whether to overwrite the last built file
 
@@ -54,7 +90,7 @@ pyinstaller -n app1 -D --add-data "src/app1/res;res" -p src src/app1/app1.py
 pyinstaller app1.spec --noconfirm
 ```
 
-**Run the EXE**:
+Run EXE:
 
 ```shell
 app1.exe --config _internal\res\config.yml
