@@ -3,7 +3,9 @@ class ContextProxy:
   A proxy for a context object that will be initialized later. This allows modules to import the proxy instance (`log`, `config`) directly, and it will automatically forward calls to the real object once `init()` is called.
   一个上下文对象的代理，该对象将在稍后被初始化。这允许模块直接导入代理实例（`log`、`config`），并在 `init()` 被调用后，它会自动将调用转发给真实的对象。
   """
-  _instance = None
+
+  def __init__(self):
+    self._instance = None
 
   def set_instance(self, instance):
     """
@@ -11,6 +13,22 @@ class ContextProxy:
     由 init 函数调用，以注入真实的、已配置的对象。
     """
     self._instance = instance
+
+  def get_instance(self):
+    """
+    Return the injected instance.
+    返回已注入的实例。
+    """
+    if self._instance is None:
+      raise RuntimeError("The application context has not been initialized. Please call 'init()' first.")
+    return self._instance
+
+  def clear_instance(self):
+    """
+    Clear the injected instance.
+    清除已注入的实例。
+    """
+    self._instance = None
 
   def is_initialized(self) -> bool:
     """

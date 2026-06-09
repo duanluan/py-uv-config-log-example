@@ -1,9 +1,21 @@
-import argparse
+from importlib.resources import files
 from pathlib import Path
+from typing import Optional
 from pydantic_settings import BaseSettings
 from pydantic import Field, ConfigDict, ValidationError, field_validator
 
 import yaml
+
+VALID_LOG_LEVELS = {
+  'notset',
+  'debug',
+  'info',
+  'warn',
+  'warning',
+  'error',
+  'fatal',
+  'critical',
+}
 
 
 class LogSettings(BaseSettings):
@@ -11,6 +23,19 @@ class LogSettings(BaseSettings):
   Represents the logging configuration settings for the application.
   表示应用程序的日志配置设置
   """
+  model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+  @classmethod
+  def settings_customise_sources(
+    cls,
+    settings_cls,
+    init_settings,
+    env_settings,
+    dotenv_settings,
+    file_secret_settings,
+  ):
+    return (init_settings,)
+
   path: str = "./logs"
   file: str = "app"
   level: str = "info"
@@ -18,13 +43,31 @@ class LogSettings(BaseSettings):
   when: str = "midnight"
   # Use an alias to allow kebab-case in the YAML file (e.g., 'bak-count').
   # 使用别名以允许在 YAML 文件中使用 kebab-case (例如, 'bak-count')。
-  bak_count: int = Field(alias="bak-count", default=30, ge=0)
+  bak_count: int = Field(alias="bak-count", default=30)
   compress_level: int = Field(alias="compress-level", default=9, ge=0, le=9)
   compress_suffix: str = Field(alias="compress-suffix", default=".7z")
   compress_schedule_cron: str = Field(alias="compress-schedule-cron", default="0 1 * * *")
   # Archive retention count. If smaller than bak_count, effective retention is raised to bak_count to avoid repeated recompression.
   # 压缩归档保留数量。若小于 bak_count，为避免重复压缩，实际保留数会提升到 bak_count。
-  compress_bak_count: int = Field(alias="compress-bak-count", default=90, ge=0)
+  compress_bak_count: int = Field(alias="compress-bak-count", default=90)
+
+  @field_validator('level', mode='before')
+  @classmethod
+  def normalize_level(cls, value):
+    """
+    Normalize log level names and reject unknown values.
+    规范化日志级别名称，并拒绝未知值。
+    """
+    if value is None:
+      return 'info'
+    if not isinstance(value, str):
+      raise ValueError(f"level must be a string, got {type(value).__name__}")
+
+    level = value.strip().lower()
+    if level not in VALID_LOG_LEVELS:
+      supported = ', '.join(sorted(VALID_LOG_LEVELS))
+      raise ValueError(f"Unsupported log level '{value}'. Supported values: {supported}")
+    return level
 
   @field_validator('compress_suffix', mode='before')
   @classmethod
@@ -36,7 +79,7 @@ class LogSettings(BaseSettings):
     if value is None:
       return '.7z'
     if not isinstance(value, str):
-      raise TypeError(f"compress-suffix must be a string, got {type(value).__name__}")
+      raise ValueError(f"compress-suffix must be a string, got {type(value).__name__}")
 
     suffix = value.strip().lower()
     if not suffix:
@@ -55,7 +98,7 @@ class LogSettings(BaseSettings):
     if value is None:
       return ''
     if not isinstance(value, str):
-      raise TypeError(
+      raise ValueError(
         f"compress-schedule-cron must be a string, got {type(value).__name__}"
       )
     return value.strip()
@@ -69,6 +112,17 @@ class AppSettings(BaseSettings):
   # By setting model_config, we allow extra fields that are not explicitly defined in the model. This enables loading of any top-level keys from the config.yml file, such as 'log' and other custom sections (e.g., 'database').
   # 通过设置 model_config，我们允许模型中未明确定义的额外字段。这使得可以从 config.yml 文件加载任何顶级键，例如 'log' 和其他自定义部分 (例如, 'database')。
   model_config = ConfigDict(extra='allow')
+
+  @classmethod
+  def settings_customise_sources(
+    cls,
+    settings_cls,
+    init_settings,
+    env_settings,
+    dotenv_settings,
+    file_secret_settings,
+  ):
+    return (init_settings,)
 
   # Use default_factory to avoid shared mutable defaults in model field definitions.
   # 使用 default_factory 避免模型字段默认值的共享实例问题。
@@ -97,40 +151,27 @@ def find_project_root(marker_file: str = 'pyproject.toml') -> Path:
   raise FileNotFoundError(f"Project root with '{marker_file}' not found.")
 
 
-def load_config_yml(config_file_rel_path: str) -> AppSettings:
+def load_config_yml(config_file_path: Optional[str] = None) -> AppSettings:
   """
-  Loads a YAML configuration file and parses it into an AppSettings object. The path to the configuration file can be specified via the '--config' command-line argument. If it's not provided, a default path relative to the project's 'src' directory is used.
-  加载 YAML 配置文件并将其解析为 AppSettings 对象。配置文件的路径可以通过 '--config' 命令行参数指定。如果没有提供该参数，则使用相对于项目 'src' 目录的默认路径。
+  Loads a YAML configuration file and parses it into an AppSettings object. Explicit relative paths are resolved from the current working directory. If no path is provided, the packaged app config is loaded.
+  加载 YAML 配置文件并将其解析为 AppSettings 对象。显式传入的相对路径按当前工作目录解析。如果没有提供路径，则加载打包的应用配置。
 
-  :param config_file_rel_path: The default relative path to the config file (from 'src' folder), used if the '--config' argument is not provided. 配置文件的默认相对路径 (从 'src' 文件夹算起)，在未提供 '--config' 参数时使用。
+  :param config_file_path: Explicit path to the config file. Relative paths are resolved from the current working directory. 配置文件的显式路径。相对路径按当前工作目录解析。
   :return: An AppSettings object populated with the loaded configuration. 一个填充了已加载配置的 AppSettings 对象。
   :raises FileNotFoundError: If the configuration file cannot be found at the determined path. 如果在确定的路径下找不到配置文件。
   :raises Exception: If there is an error reading or parsing the YAML file. 如果读取或解析 YAML 文件时出错。
   """
-  # Parse command-line arguments to check for an explicit config file path.
-  # 解析命令行参数以检查是否显式指定了配置文件路径。
-  parser = argparse.ArgumentParser(description="Load application configuration.")
-  parser.add_argument('--config', type=str, help='Absolute or relative path to the YAML config file.')
-  args, _ = parser.parse_known_args()
-
   # Determine the absolute path of the configuration file.
   # 确定配置文件的绝对路径。
-  if args.config:
-    # Use the path provided via the --config command-line argument.
-    # 使用通过 --config 命令行参数提供的路径。
-    config_file_abs_path = Path(args.config).expanduser().resolve()
+  if config_file_path:
+    config_file_abs_path = Path(config_file_path).expanduser().resolve()
   else:
-    # If not provided, construct the default path from the project root.
-    # 如果未提供，则从项目根目录构建默认路径。
-    # This assumes a project structure like: project_root/src/config.yml
-    # 这里假设项目结构类似于：project_root/src/config.yml
-    project_root = find_project_root()
-    config_file_abs_path = project_root / 'src' / config_file_rel_path
+    config_file_abs_path = files('app1').joinpath('res/config.yml')
 
   try:
     # Read and parse the YAML configuration file.
     # 读取并解析 YAML 配置文件。
-    with open(config_file_abs_path, 'r', encoding='utf-8') as file_path:
+    with config_file_abs_path.open('r', encoding='utf-8') as file_path:
       # Use yaml.safe_load for security against arbitrary code execution.
       # 使用 yaml.safe_load 以防止任意代码执行，增强安全性。
       full_config = yaml.safe_load(file_path)

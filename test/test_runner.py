@@ -1,9 +1,17 @@
 import os
+import sys
 import time
+import unittest
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_PATH = PROJECT_ROOT / 'src'
+if str(SRC_PATH) not in sys.path:
+  sys.path.insert(0, str(SRC_PATH))
 
 from common import app_context
 
-TEST_CONFIG_PATH = '../test/config-test.yml'
+TEST_CONFIG_PATH = str(Path(__file__).resolve().parent / 'config-test.yml')
 
 
 def run_test(duration_seconds: int):
@@ -21,7 +29,7 @@ def run_test(duration_seconds: int):
 
   # Ensure the log directory exists.
   # 确保日志目录存在。
-  log_dir = app_context.config.log.path
+  log_dir = app_context.log_path
   if not os.path.exists(log_dir):
     os.makedirs(log_dir)
 
@@ -41,7 +49,18 @@ def run_test(duration_seconds: int):
   except Exception:
     app_context.log.exception('An error occurred during the test run.')
   finally:
+    app_context.clear()
     print("--- Test run finished. ---")
+
+
+class RunnerTest(unittest.TestCase):
+  def tearDown(self):
+    app_context.clear()
+
+  def test_run_test_clears_app_context_after_finishing(self):
+    run_test(0)
+
+    self.assertFalse(app_context.is_initialized())
 
 
 if __name__ == '__main__':

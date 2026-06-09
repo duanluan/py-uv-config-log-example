@@ -79,19 +79,38 @@ uv pip install -e .
 - `-p` 添加模块搜索路径（`sys.path`）
 
 ```shell
-pyinstaller -n app1 -D --add-data "src/app1/res;res" -p src src/app1/app1.py
+# Windows
+uv run --group build pyinstaller -n app1 -D --add-data "src/app1/res;app1/res" -p src src/app1/app1.py
+
+# Linux / MacOS
+uv run --group build pyinstaller -n app1 -D --add-data "src/app1/res:app1/res" -p src src/app1/app1.py
 ```
 
 通过 `.spec` 构建：
 
 - `--noconfirm`无需确认是否覆盖上次构建的文件
+- 执行此命令前需要先生成或保留 `app1.spec` 文件
 
 ```shell
-pyinstaller app1.spec --noconfirm
+uv run --group build pyinstaller app1.spec --noconfirm
 ```
 
 运行 EXE：
 
 ```shell
-app1.exe --config _internal\res\config.yml
+# Windows
+app1.exe
+
+# Linux / MacOS
+./app1
+```
+
+使用自定义配置运行 EXE：
+
+```shell
+# Windows
+app1.exe --config C:\path\to\config.yml
+
+# Linux / MacOS
+./app1 --config /path/to/config.yml
 ```

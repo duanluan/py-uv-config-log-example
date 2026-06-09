@@ -71,11 +71,14 @@ class ArchivingTimedRotatingFileHandler(handlers.TimedRotatingFileHandler):
     :param compress_backup_count: The number of compressed files to keep (0 or negative means keep all). 要保留的压缩文件数量（0 或负数表示全部保留）。
     :param compress_schedule_cron: Cron expression for periodic archival. 定期归档任务的 Cron 表达式。
     """
-    super().__init__(filename, when, interval, backupCount, encoding, delay, utc, atTime)
+    # Keep parent rollover behavior, but disable parent retention deletion.
+    # 保留父类轮替行为，但禁用父类保留清理。
+    super().__init__(filename, when, interval, 0, encoding, delay, utc, atTime)
 
-    # Store the original backupCount for our custom log cleanup logic.
-    # 存储原始的 backupCount 以用于我们的自定义日志清理逻辑。
-    self.real_backup_count = backupCount
+    # Store the configured backupCount for this project's custom cleanup logic.
+    # 存储配置的 backupCount，用于本项目的自定义清理逻辑。
+    self.real_backup_count = int(backupCount)
+    self.namer = _namer
     # Accept both "zip" and ".zip" formats and normalize.
     # 同时接受 "zip" 与 ".zip" 写法并标准化。
     suffix = (compress_suffix or '.7z')
@@ -90,7 +93,7 @@ class ArchivingTimedRotatingFileHandler(handlers.TimedRotatingFileHandler):
 
     # The number of compressed backups to retain.
     # 要保留的压缩备份数量。
-    self.compress_backup_count = compress_backup_count
+    self.compress_backup_count = int(compress_backup_count)
     self.compress_schedule_cron = (
       compress_schedule_cron.strip() if isinstance(compress_schedule_cron, str) else compress_schedule_cron
     )
@@ -136,13 +139,6 @@ class ArchivingTimedRotatingFileHandler(handlers.TimedRotatingFileHandler):
         pass
       self._scheduler = None
 
-    # Run a best-effort archival pass on shutdown so recently rotated logs are not left uncompressed.
-    # 在关闭时执行一次尽力归档，避免最近轮替日志未被压缩。
-    try:
-      self._run_archival_tasks()
-    except Exception as e:
-      self._warn(f"Final archival pass failed during handler close: {e}")
-
     super().close()
 
   def doRollover(self):
@@ -150,8 +146,8 @@ class ArchivingTimedRotatingFileHandler(handlers.TimedRotatingFileHandler):
     Performs log rotation.
     执行日志轮替。
     """
-    # First, call the parent class's method to perform the standard log file rollover.
-    # 首先，调用父类的方法来执行标准的日志文件轮替。
+    # First, call the parent class's method to perform rollover only.
+    # 首先，调用父类的方法，仅执行日志轮替。
     super().doRollover()
     # If no cron schedule is configured, run archival right after rollover.
     # 如果未配置 cron 调度，则在轮替后立即执行归档。
@@ -205,14 +201,39 @@ class ArchivingTimedRotatingFileHandler(handlers.TimedRotatingFileHandler):
   def _archive_file_path(self, log_file_path):
     return os.path.splitext(log_file_path)[0] + self.compress_suffix
 
+  def _is_valid_archive(self, archive_file_path, expected_member_name):
+    try:
+      if self.compress_suffix == '.zip':
+        if not zipfile.is_zipfile(archive_file_path):
+          return False
+        with zipfile.ZipFile(archive_file_path, mode='r') as archive:
+          return expected_member_name in archive.namelist()
+
+      if py7zr is None:
+        return False
+      if not py7zr.is_7zfile(archive_file_path):
+        return False
+      with py7zr.SevenZipFile(archive_file_path, mode='r') as archive:
+        return expected_member_name in archive.getnames()
+    except Exception:
+      return False
+
   def _has_archive(self, log_file_path):
-    return os.path.exists(self._archive_file_path(log_file_path))
+    archive_file_path = self._archive_file_path(log_file_path)
+    expected_member_name = os.path.basename(log_file_path)
+    return (
+      os.path.exists(archive_file_path)
+      and self._is_valid_archive(archive_file_path, expected_member_name)
+    )
 
   def _compress_with_7z(self, log_file_path, archive_file_path):
     if py7zr is None:
       raise RuntimeError("py7zr is required for '.7z' compression.")
 
-    filters = [{"id": py7zr.FILTER_LZMA2, "preset": self.compress_level}]
+    if self.compress_level == 0:
+      filters = [{"id": py7zr.FILTER_COPY}]
+    else:
+      filters = [{"id": py7zr.FILTER_LZMA2, "preset": self.compress_level}]
     with py7zr.SevenZipFile(archive_file_path, mode='w', filters=filters) as archive:
       archive.write(log_file_path, arcname=os.path.basename(log_file_path))
 
@@ -244,27 +265,41 @@ class ArchivingTimedRotatingFileHandler(handlers.TimedRotatingFileHandler):
       # Construct the corresponding archive filename.
       # 构建相应的归档文件名。
       compress_file_path = self._archive_file_path(log_file_path)
+      expected_member_name = os.path.basename(log_file_path)
 
       if os.path.exists(compress_file_path):
-        # Skip if the archive already exists.
-        # 如果归档文件已存在，则跳过。
-        continue
+        # Skip valid archives, but repair broken ones by recreating them.
+        # 跳过有效归档；若归档损坏，则重新创建。
+        if self._is_valid_archive(compress_file_path, expected_member_name):
+          continue
+        try:
+          os.remove(compress_file_path)
+        except OSError as e:
+          self._warn(f"Failed to remove broken archive '{compress_file_path}': {e}")
+          continue
 
+      temp_file_path = f"{compress_file_path}.tmp"
       try:
+        if os.path.exists(temp_file_path):
+          os.remove(temp_file_path)
         # Create the archive using py7zr.
         # 使用 py7zr 创建归档文件。
         if self.compress_suffix == '.zip':
-          self._compress_with_zip(log_file_path, compress_file_path)
+          self._compress_with_zip(log_file_path, temp_file_path)
         else:
-          self._compress_with_7z(log_file_path, compress_file_path)
+          self._compress_with_7z(log_file_path, temp_file_path)
+
+        if not self._is_valid_archive(temp_file_path, expected_member_name):
+          raise RuntimeError(f"Created archive is invalid: {temp_file_path}")
+        os.replace(temp_file_path, compress_file_path)
       except Exception as e:
         # Silently skip on error to avoid interrupting the logging process.
         # 为避免中断日志记录过程，在出错时静默跳过。
         # Remove broken archive if compression failed.
         # 如果压缩失败，删除损坏的归档文件，保留原日志供后续重试。
         try:
-          if os.path.exists(compress_file_path):
-            os.remove(compress_file_path)
+          if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
         except OSError:
           pass
         self._warn(f"Failed to compress '{log_file_path}' to '{compress_file_path}': {e}")
@@ -298,14 +333,16 @@ class ArchivingTimedRotatingFileHandler(handlers.TimedRotatingFileHandler):
     Deletes the oldest compressed files that exceed the compress_backup_count limit.
     删除超出 compress_backup_count 限制的最旧的压缩文件。
     """
-    # If compress_backup_count is non-positive, do nothing (keep all archives).
-    # 如果 compress_backup_count 是非正数，则不执行任何操作（保留所有归档）。
-    if self.compress_backup_count <= 0:
+    # Keep all archives when either archive retention or log retention is unlimited.
+    # 当归档保留或日志保留为无限制时，保留所有归档。
+    if self.compress_backup_count <= 0 or self.real_backup_count <= 0:
       return
 
-    # Avoid repeated recompression when archive retention is lower than log retention by keeping at least backupCount archives.
-    # 当归档保留数低于日志保留数时，至少保留 backupCount 份归档以避免重复压缩。
-    effective_archive_keep = max(self.compress_backup_count, self.real_backup_count)
+    # Avoid repeated recompression when finite archive retention is lower than finite log retention.
+    # 当有限归档保留数低于有限日志保留数时，至少保留 backupCount 份归档。
+    effective_archive_keep = self.compress_backup_count
+    if self.real_backup_count > 0:
+      effective_archive_keep = max(self.compress_backup_count, self.real_backup_count)
     if (
       effective_archive_keep != self.compress_backup_count
       and not self._retention_warning_emitted
@@ -339,11 +376,9 @@ class ArchivingTimedRotatingFileHandler(handlers.TimedRotatingFileHandler):
       # Get all rotated log files.
       # 获取所有已轮替的日志文件。
       all_log_files = self._get_sorted_files(self.log_file_pattern)
-      if not all_log_files:
-        return
-
-      self._compress_new_logs(all_log_files)
-      self._cleanup_old_logs(all_log_files)
+      if all_log_files:
+        self._compress_new_logs(all_log_files)
+        self._cleanup_old_logs(all_log_files)
       # Clean up old compressed archives.
       # 清理旧的压缩归档文件。
       self._cleanup_old_archives()
@@ -354,19 +389,22 @@ def _namer(name):
   Custom namer for log rotation to meet the "app1_YYMMDD_HHMMSS.log" format.
   用于日志轮替的自定义命名器，以满足 "app1_YYMMDD_HHMMSS.log" 的格式。
   """
-  match = re.search(r'(.*)\.log\.(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})$', name)
+  match = re.search(
+    r'(.*)\.log\.(\d{4}-\d{2}-\d{2})(?:_(\d{2})(?:-(\d{2})(?:-(\d{2}))?)?)?$',
+    name,
+  )
   if match:
     base_part = os.path.basename(match.group(1))
     date_part = match.group(2).replace('-', '')[2:]
-    time_part = match.group(3).replace('-', '')
     dir_part = os.path.dirname(name)
-    return os.path.join(dir_part, f"{base_part}_{date_part}_{time_part}.log")
 
-  match_daily = re.search(r'(.*)\.log\.(\d{4}-\d{2}-\d{2})$', name)
-  if match_daily:
-    base_part = os.path.basename(match_daily.group(1))
-    date_part = match_daily.group(2).replace('-', '')[2:]
-    dir_part = os.path.dirname(name)
+    hour_part = match.group(3)
+    if hour_part is not None:
+      minute_part = match.group(4) or '00'
+      second_part = match.group(5) or '00'
+      time_part = f"{hour_part}{minute_part}{second_part}"
+      return os.path.join(dir_part, f"{base_part}_{date_part}_{time_part}.log")
+
     return os.path.join(dir_part, f"{base_part}_{date_part}.log")
 
   return name
@@ -390,8 +428,11 @@ def create_logger(
   """
   logger = logging.getLogger(logger_name)
 
-  level = level.lower() if isinstance(level, str) else 'info'
-  valid_level = _levelRelations.get(level, logging.INFO)
+  level = level.strip().lower() if isinstance(level, str) else 'info'
+  if level not in _levelRelations:
+    supported = ', '.join(sorted(_levelRelations))
+    raise ValueError(f"Unsupported log level '{level}'. Supported values: {supported}")
+  valid_level = _levelRelations[level]
 
   log_formatter = logging.Formatter(fmt)
 
@@ -416,7 +457,6 @@ def create_logger(
       compress_schedule_cron=compress_schedule_cron,
     )
     new_file_handler.setFormatter(log_formatter)
-    new_file_handler.namer = _namer
   except Exception:
     if new_stream_handler is not None:
       try:

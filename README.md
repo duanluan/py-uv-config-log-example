@@ -79,19 +79,38 @@ Initial build:
 - `-p` append search path to `sys.path`
 
 ```shell
-pyinstaller -n app1 -D --add-data "src/app1/res;res" -p src src/app1/app1.py
+# Windows
+uv run --group build pyinstaller -n app1 -D --add-data "src/app1/res;app1/res" -p src src/app1/app1.py
+
+# Linux / MacOS
+uv run --group build pyinstaller -n app1 -D --add-data "src/app1/res:app1/res" -p src src/app1/app1.py
 ```
 
 Build with `.spec`:
 
 - `--noconfirm` No need to confirm whether to overwrite the last built file
+- Generate or keep an `app1.spec` file before running this command
 
 ```shell
-pyinstaller app1.spec --noconfirm
+uv run --group build pyinstaller app1.spec --noconfirm
 ```
 
 Run EXE:
 
 ```shell
-app1.exe --config _internal\res\config.yml
+# Windows
+app1.exe
+
+# Linux / MacOS
+./app1
+```
+
+Run EXE with a custom config:
+
+```shell
+# Windows
+app1.exe --config C:\path\to\config.yml
+
+# Linux / MacOS
+./app1 --config /path/to/config.yml
 ```

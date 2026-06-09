@@ -23,8 +23,8 @@ log:
   # Suffix for the compressed log archives (e.g., .7z, .zip).
   # 压缩日志归档文件的后缀名 (例如, .7z, .zip)。
   compress-suffix: .7z
-  # Cron expression for the scheduled log compression task.
-  # 定时日志压缩任务的 Cron 表达式。
+  # Cron expression for scheduled log compression. Empty value disables the scheduler and scans rotated logs once after each rollover.
+  # 定时日志压缩任务的 Cron 表达式。为空时不启用定时任务，而是在每次日志轮转后扫描一次已轮转日志。
   compress-schedule-cron: '0 1 * * *'
   # Number of compressed backup archives to retain. If smaller than bak-count, effective retention is raised to bak-count.
   # 保留的已压缩归档数量。若小于 bak-count，为避免重复压缩，实际保留数会提升到 bak-count。

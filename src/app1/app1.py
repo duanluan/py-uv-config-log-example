@@ -1,18 +1,28 @@
+import argparse
 import time
 
 from common import app_context
-from common.app_context import log, config
+from common.app_context import log
+
+
+def _cli_config_path():
+  parser = argparse.ArgumentParser(add_help=False)
+  parser.add_argument('--config', type=str)
+  args, _ = parser.parse_known_args()
+  if not args.config:
+    return None
+  return args.config
 
 
 def main():
   # Initialize the app context, loading config and setting up the logger.
   # 初始化应用上下文，加载配置并设置日志记录器。
-  app_context.init('app1/res/config.yml', "app1")
+  app_context.init(_cli_config_path(), "app1")
 
   try:
-    # Log the AppSettings instance for the config.
-    # 记录配置文件对应的 AppSettings 实例。
-    log.info(config)
+    # Log startup state without dumping configuration values.
+    # 记录启动状态，不输出配置内容。
+    log.info('Application started; configuration loaded.')
 
     # Main loop to keep the application running for background tasks.
     # 主循环使应用保持运行以执行后台任务。
@@ -27,6 +37,9 @@ def main():
     # Log any unexpected exceptions in the main loop.
     # 记录主循环中的任何意外异常。
     log.exception('An unexpected error occurred in the main loop.')
+    raise
+  finally:
+    app_context.clear()
 
 
 if __name__ == '__main__':
